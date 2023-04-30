@@ -1,8 +1,11 @@
-Example 01 - provided by ChatGPT - 
+*****Example 01 - Processing.js running in a browser sending data to arduino unsing webSerial*****
+---------------------------------------------------------------------------------------------
 
-promt: Please write me an example on how to use webSerial to communicate form a processing.js sketch running in a browser to a arduino Uno. The Processing.js sketch should send values to dim an LED at the arduino uno. Maybe a sinus wave. Communication should be asxycron. Please add comments to understand the code better. Thanks 
+***Using ChatGPT to write the examples and the documentation*** 
 
-result: 
+**promt:** *Please write me an example on how to use webSerial to communicate form a processing.js sketch running in a browser to a arduino Uno. The Processing.js sketch should send values to dim an LED at the arduino uno. Maybe a sinus wave. Communication should be asxycron. Please add comments to understand the code better. Thanks* 
+
+**result:** 
 
 Certainly, here is an example of how you can use webSerial to communicate from a Processing.js sketch running in a browser to an Arduino Uno to dim an LED using a sinus wave:
 

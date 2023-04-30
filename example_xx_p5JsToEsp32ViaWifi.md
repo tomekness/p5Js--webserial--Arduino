@@ -3,78 +3,154 @@
 
 ***Using ChatGPT to write the examples and the documentation*** 
 
-**promt:** *could you please add the possibility to read a json file with an array of integer and send this values instead of the sin wave. If the array ends just start over. Could you also add an variable to define the interval a value is send (time bevor sending the next value)
-
-- could you please rewrite this code using webSerial in a browser 
-* 
+**promt:** *could you write an example on how to send data from a p5.js sketch to an esp32 via wifi using the arduino IDE. the values should be a sin wave. the esp32 should dim an LED. can you wrap the p5.js code with html and some debung feedback* 
 
 **result:** 
 
-Certainly! Here's an example of how to modify the previous code to use Web Serial API in a browser:
+Sure! Here's an example that uses a p5.js sketch to generate a sinusoidal wave and sends the data to an ESP32 via WiFi using the Arduino IDE. The ESP32 uses the data to control the brightness of an LED connected to one of its PWM pins.
 
-```javascript
-let values = []; // array to hold values read from JSON file
-let index = 0; // current index in values array
-let sendInterval = 1000; // interval between sending values, in milliseconds
-let lastSendTime = 0; // time of last value sent
-let port; // object to hold serial port instance
+First, you'll need to set up the ESP32 board in the Arduino IDE and connect it to your WiFi network. Here's a guide that can help you with that: https://randomnerdtutorials.com/getting-started-with-esp32/
 
-function preload() {
-  // load JSON file with values array
-  values = loadJSON("values.json").values;
+Once you have the ESP32 set up, you can use the following code to receive data over WiFi and control the LED:
+
+```cpp
+#include <WiFi.h>
+
+const char* ssid = "your-ssid";
+const char* password = "your-password";
+
+const int ledPin = 5;
+int ledBrightness = 0;
+
+WiFiServer server(80);
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+
+  server.begin();
+  Serial.println("Server started.");
 }
 
-async function setup() {
-  // request permission to use Web Serial API
-  const portOptions = { baudRate: 9600 };
-  port = await navigator.serial.requestPort();
-  await port.open(portOptions);
-  
-  // set up the serial port to send and receive data
-  port.addEventListener("open", () => console.log("Serial port opened"));
-  port.addEventListener("error", err => console.log("Serial port error:", err));
-}
+void loop() {
+  WiFiClient client = server.available();
+  if (client) {
+    String request = client.readStringUntil('\r');
+    Serial.println(request);
+    client.flush();
 
-function draw() {
-  // check if enough time has passed to send the next value
-  if (millis() - lastSendTime >= sendInterval) {
-    // get the next value from the values array and send it over serial
-    const value = values[index];
-    const writer = port.writable.getWriter();
-    writer.write(new Uint8Array([value]));
-    writer.releaseLock();
-    
-    // update index and lastSendTime
-    index = (index + 1) % values.length;
-    lastSendTime = millis();
+    int pos = request.indexOf("value=");
+    if (pos != -1) {
+      int value = request.substring(pos + 6).toInt();
+      ledBrightness = map(value, 0, 255, 0, 1023);
+      analogWrite(ledPin, ledBrightness);
+    }
+
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/html");
+    client.println("Connection: close");
+    client.println();
+    client.println("<!DOCTYPE HTML>");
+    client.println("<html>");
+    client.println("<head><title>ESP32 LED Control</title></head>");
+    client.println("<body>");
+    client.print("<p>LED Brightness: ");
+    client.print(ledBrightness);
+    client.println("</p>");
+    client.println("</body>");
+    client.println("</html>");
   }
 }
 ```
 
-In this example, we first create an empty `values` array and set the initial `index` to 0. We also define a `sendInterval` variable (set to 1000 milliseconds) and a `lastSendTime` variable (initialized to 0). Finally, we create a `port` object to hold the `SerialPort` instance and load the JSON file with the values array using the `loadJSON` function in the `preload` function.
+This code sets up a WiFi server on port 80 and waits for incoming connections. When a client connects and sends an HTTP request, the server reads the request and extracts the value parameter from the URL. It then maps the value to the range 0-1023 (the range of the PWM output on the ESP32) and sets the LED brightness accordingly. Finally, the server sends an HTTP response back to the client with a simple HTML page displaying the current brightness.
 
-In the `setup` function, we first request permission to use the Web Serial API using the `navigator.serial.requestPort` method. We then open the serial port using the `open` method of the port object, passing in the desired options for the serial port (in this case, just the `baudRate` option). We also set up event listeners to log messages when the serial port is opened or encounters an error.
+Now, here's an example p5.js sketch that generates a sinusoidal wave and sends the data to the ESP32 over WiFi. everything wrapped in an example HTML file that includes the p5.js code and adds some debug feedback:
 
-In the `draw` function, we first check if enough time has passed since the last value was sent using the `millis` function. If it has, we get the next value from the `values` array using the `index` variable and send it over serial using the `writable` property of the `port` object. We create a `writer` object using the `getWriter` method, write the value as a `Uint8Array` (since we're sending integers in the range 0-255), and release the lock using the `releaseLock` method. We then update the `index` variable to move to the next value in the array (using the modulus operator to wrap around to the beginning if we've reached the end) and update the `lastSendTime` variable to the current time.
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>ESP32 LED Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+  </head>
+  <body>
+    <div id="debug"></div>
+    <script>
+      let currentValue = 0;
+      let sineWave = [];
 
-Note that this code assumes that you have a JSON file named `values.json` in the same directory as your HTML file with the following format:
+      function setup() {
+        createCanvas(400, 200);
+        for (let i = 0; i < width; i++) {
+          sineWave[i] = sin(map(i, 0, width, 0, TWO_PI));
+        }
+        connectToServer();
+      }
 
-```json
-{
-  "values": [1, 2, 3, 4, 5]
-}
+      function draw() {
+        background(255);
+        stroke(0);
+        noFill();
+        beginShape();
+        for (let i = 0; i < width; i++) {
+          let x = i;
+          let y = map(sineWave[i], -1, 1, height, 0);
+          vertex(x, y);
+        }
+        endShape();
+
+        let index = round(map(currentValue, -1, 1, 0, width - 1));
+        let value = round(map(currentValue, -1, 1, 0, 255));
+        stroke(255, 0, 0);
+        fill(255, 0, 0);
+        ellipse(index, map(sineWave[index], -1, 1, height, 0), 10, 10);
+        debug('Current value: ' + value);
+        sendValue(value);
+        
+        currentValue += 0.01;
+        if (currentValue > 1) {
+          currentValue = -1;
+        }
+      }
+
+      function connectToServer() {
+        debug('Connecting to server...');
+        // Change the IP address to match your ESP32's IP address
+        fetch('http://192.168.1.123/').then(function(response) {
+          debug('Connected to server');
+        }).catch(function(error) {
+          debug('Failed to connect to server');
+          setTimeout(connectToServer, 1000);
+        });
+      }
+
+      function sendValue(value) {
+        fetch('/set-value?value=' + value).then(function(response) {
+          // Uncomment the next line to see the server response in the console
+          // response.text().then(console.log);
+        }).catch(function(error) {
+          debug('Failed to send value');
+        });
+      }
+
+      function debug(message) {
+        let debugElement = document.getElementById('debug');
+        debugElement.innerHTML += message + '<br>';
+      }
+    </script>
+  </body>
+</html>
 ```
 
-where the `values` key contains an array of integers to send over serial. You can modify the values in the array to change the values being sent. Also note that WebSerial API requires the user to grant permission to access the serial port, so the user will be prompted to do so when the page loads. Once permission is granted, the `setup` function requests the serial port using `navigator.serial.requestPort()` and opens it using the `port.open()` method. We then set up event listeners for the `open` and `error` events to log messages when the port is successfully opened or encounters an error.
+This HTML file includes the p5.js code in a `<script>` tag and adds a `<div>` element for displaying debug messages. The `connectToServer()` function uses the `fetch()` API to send a GET request to the ESP32's IP address and displays a debug message indicating whether the connection was successful. The `sendValue()` function sends the LED brightness value to the server using a GET request to the `/set-value` URL, and displays a debug message indicating whether the request was successful. The `debug()` function adds a message to the debug `<div>` element. 
 
-In the `draw` function, we use `setInterval` to repeatedly send a value over serial every `sendInterval` milliseconds. We first check if it's been at least `sendInterval` milliseconds since the last value was sent using the `Date.now()` function. If it has, we get the next value from the `values` array using the `index` variable and send it over serial using the `port.write()` method. We then update the `index` variable to move to the next value in the array (using the modulus operator to wrap around to the beginning if we've reached the end).
-
-Note that this code assumes that you have a JSON file named `values.json` in the same directory as your HTML file with the following format:
-
-```json
-{
-  "values": [1, 2, 3, 4, 5]
-}
-```
-
-where the `values` key contains an array of integers to send over serial. You can modify the values in the array to change the values being sent, and you can modify the `sendInterval` variable to change the interval between sending values.
+Make sure to replace the IP address in the `connectToServer()` function with the IP address of your ESP32.
